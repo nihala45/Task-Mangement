@@ -13,10 +13,11 @@ const app = express();
 connectDB();
 
 
-app.use(cors({
-  origin: 'https://task-mangement-ashy.vercel.app',
-  credentials: true,
-}));
+const allowedOrigins = [
+  'https://task-mangement-ashy.vercel.app',
+  'https://task-mangement-git-main-nihala45s-projects.vercel.app'
+];
+
 
 app.use(express.json());
 
