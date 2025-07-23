@@ -36,40 +36,37 @@ const generateRefreshToken = (userId) => {
 };
 
 
-export const register = async (req, res) => {
-  const { username, email, password } = req.body;
 
+export const registerUser = async (req, res) => {
   try {
+    const { username, email, password } = req.body;
+
+    if (!username || !email || !password) {
+      return res.status(400).json({ message: 'All fields are required' });
+    }
+
     const existingUser = await User.findOne({ email });
-    if (existingUser) return res.status(409).json({ message: 'User already exists' });
+
+    if (existingUser) {
+      return res.status(409).json({ message: 'User already exists' });
+    }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const otp = otplib.authenticator.generate(process.env.OTP_SECRET);
 
-    const newUser = new User({
+    const user = new User({
       username,
       email,
-      password: hashedPassword,
-      otp,
-      verified: false,
+      password: hashedPassword
     });
 
-    await newUser.save();
+    await user.save();
 
-    await transporter.sendMail({
-      from: process.env.EMAIL_HOST_USER,
-      to: email,
-      subject: 'Email Verification OTP',
-      text: `Hi ${username},\n\nYour OTP is: ${otp}\nIt is valid for 5 minutes.`,
-    });
-
-    res.status(201).json({ message: 'User registered successfully. Please check your email for the OTP.' });
+    return res.status(201).json({ message: 'User registered successfully' });
   } catch (error) {
-    console.error('Registration Error:', error);
-    res.status(500).json({ error: 'Registration failed' });
+    console.error('Register Error:', error);
+    res.status(500).json({ message: 'Server error' });
   }
 };
-
 
 export const verifyOtp = async (req, res) => {
   const { email, otp } = req.body;
