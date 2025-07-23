@@ -1,4 +1,4 @@
-import React, { useState, useContext } from "react";
+import React, { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "../api/api";
 
@@ -24,25 +24,21 @@ const OtpVerification = () => {
     setLoading(true);
 
     try {
-      const res = await api.post(`user/verify_otp/${id}`, {
+      const res = await api.post(`/user/verify_otp/${id}`, {
         email_otp: otp.trim(),
       });
 
       setSuccess(res.data.message || "OTP verified successfully!");
 
-      
-
       setTimeout(() => {
         navigate("/login");
       }, 2000);
     } catch (err) {
-      if (err.response?.data?.error) {
-        setError(err.response.data.error);
-      } else if (err.response?.data?.msg) {
-        setError(err.response.data.msg);
-      } else {
-        setError("Something went wrong. Please try again.");
-      }
+      const errMsg =
+        err.response?.data?.error ||
+        err.response?.data?.msg ||
+        "Something went wrong. Please try again.";
+      setError(errMsg);
     } finally {
       setLoading(false);
     }
