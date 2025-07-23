@@ -2,7 +2,6 @@ import User from '../models/userModel.js';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import nodemailer from 'nodemailer';
-import dotenv from 'dotenv';
 import otplib from 'otplib';
 import dotenv from 'dotenv';
 dotenv.config();
