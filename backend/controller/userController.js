@@ -1,19 +1,17 @@
-
 import User from '../models/userModel.js';
 import jwt from 'jsonwebtoken';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import nodemailer from 'nodemailer';
 import dotenv from 'dotenv';
 import otplib from 'otplib';
 
 dotenv.config();
 
-const generateToken = (userId) => {
-  return jwt.sign({ userId }, process.env.JWT_ACCESS_SECRET, { expiresIn: '15m' });
-};
 
-const generateRefreshToken = (userId) => {
-  return jwt.sign({ userId }, process.env.JWT_REFRESH_SECRET, { expiresIn: '2d' });
+otplib.authenticator.options = {
+  step: 300, 
+  window: 1,
+  secret: process.env.OTP_SECRET,
 };
 
 const transporter = nodemailer.createTransport({
@@ -24,38 +22,39 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-export const registerUser = async (req, res) => {
+
+const generateToken = (userId) => {
+  return jwt.sign({ userId }, process.env.JWT_ACCESS_SECRET, {
+    expiresIn: '15m',
+  });
+};
+
+const generateRefreshToken = (userId) => {
+  return jwt.sign({ userId }, process.env.JWT_REFRESH_SECRET, {
+    expiresIn: '7d',
+  });
+};
+
+
+export const register = async (req, res) => {
+  const { username, email, password } = req.body;
+
   try {
-    const { email, username, password } = req.body;
+    const existingUser = await User.findOne({ email });
+    if (existingUser) return res.status(409).json({ message: 'User already exists' });
 
-    if (!email || !username || !password) {
-      return res.status(400).json({ msg: 'All fields are required.' });
-    }
-
-    const existingUser = await User.findOne({ email, is_email_verified: true });
-    if (existingUser) {
-      return res.status(400).json({ error: 'Email is already registered and verified.' });
-    }
-
-    const otp = otplib.authenticator.generate(otplib.authenticator.generateSecret());
-    console.log(otp,'otp confirming')
     const hashedPassword = await bcrypt.hash(password, 10);
-   
-    let user = await User.findOne({ email, is_email_verified: false });
-    if (user) {
-      user.username = username;
-      user.password = hashedPassword;
-      user.email_otp = otp;
-    } else {
-      user = new User({
-        email,
-        username,
-        password: hashedPassword,
-        email_otp: otp,
-      });
-    }
+    const otp = otplib.authenticator.generate(process.env.OTP_SECRET);
 
-    await user.save();
+    const newUser = new User({
+      username,
+      email,
+      password: hashedPassword,
+      otp,
+      verified: false,
+    });
+
+    await newUser.save();
 
     await transporter.sendMail({
       from: process.env.EMAIL_HOST_USER,
@@ -64,82 +63,63 @@ export const registerUser = async (req, res) => {
       text: `Hi ${username},\n\nYour OTP is: ${otp}\nIt is valid for 5 minutes.`,
     });
 
-    return res.status(201).json({ msg: 'OTP sent to your email.', id: user._id });
-  } catch (err) {
-    console.error("Registration error:", err);
-    return res.status(500).json({ error: 'Failed to register user.' });
+    res.status(201).json({ message: 'User registered successfully. Please check your email for the OTP.' });
+  } catch (error) {
+    console.error('Registration Error:', error);
+    res.status(500).json({ error: 'Registration failed' });
   }
 };
 
-export const verifyOTP = async (req, res) => {
+
+export const verifyOtp = async (req, res) => {
+  const { email, otp } = req.body;
+
   try {
-    const { email_otp } = req.body;
-    const { id } = req.params;
-
-    if (!email_otp) {
-      return res.status(400).json({ error: 'OTP is required' });
-    }
-
-    const user = await User.findById(id);
-    if (!user) return res.status(404).json({ error: 'User not found' });
-
-    if (user.email_otp === email_otp) {
-      user.is_email_verified = true;
-      user.email_otp = null;
-      await user.save();
-
-      const access = generateToken(user._id);
-      const refresh = generateRefreshToken(user._id);
-
-      return res.status(200).json({
-        message: 'OTP verified successfully!',
-        access,
-        refresh,
-        id: user._id,
-        username: user.username,
-        email: user.email,
-      });
-    }
-
-    return res.status(400).json({ error: 'Invalid OTP' });
-  } catch (err) {
-    console.error("OTP verification error:", err);
-    return res.status(500).json({ error: 'Failed to verify OTP.' });
-  }
-};
-export const loginUser = async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    if (!email || !password) {
-      return res.status(400).json({ error: 'Email and password are required.' });
-    }
-
     const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(400).json({ error: 'Invalid credentials' });
-    }
 
-    if (!user.is_email_verified) {
-      return res.status(403).json({ error: 'Email not verified. Please verify first.' });
-    }
+    if (!user) return res.status(404).json({ message: 'User not found' });
+    if (user.verified) return res.status(400).json({ message: 'User already verified' });
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(400).json({ error: 'Invalid credentials' });
-    }
+    const isValid = user.otp === otp;
 
-    const access = generateToken(user._id);
-    const refresh = generateRefreshToken(user._id);
+    if (!isValid) return res.status(401).json({ message: 'Invalid or expired OTP' });
 
-    return res.status(200).json({
-      refresh,
-      access,
-      id: user._id,
-      email: user.email,
+    user.verified = true;
+    user.otp = null;
+    await user.save();
+
+    res.status(200).json({ message: 'Email verified successfully' });
+  } catch (error) {
+    console.error('OTP Verification Error:', error);
+    res.status(500).json({ error: 'OTP verification failed' });
+  }
+};
+
+
+export const login = async (req, res) => {
+  const { email, password } = req.body;
+
+  try {
+    const user = await User.findOne({ email });
+
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const isPasswordCorrect = await bcrypt.compare(password, user.password);
+    if (!isPasswordCorrect) return res.status(401).json({ message: 'Invalid password' });
+
+    if (!user.verified) return res.status(403).json({ message: 'Please verify your email before logging in' });
+
+    const token = generateToken(user._id);
+    const refreshToken = generateRefreshToken(user._id);
+
+    res.status(200).json({
+      message: 'Login successful',
+      user: { id: user._id, username: user.username, email: user.email },
+      token,
+      refreshToken,
     });
-  } catch (err) {
-    console.error("Login error:", err);
-    return res.status(500).json({ error: 'Login failed. Please try again later.' });
+  } catch (error) {
+    console.error('Login Error:', error);
+    res.status(500).json({ error: 'Login failed' });
   }
 };

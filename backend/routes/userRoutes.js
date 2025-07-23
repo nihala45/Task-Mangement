@@ -1,5 +1,5 @@
 import {Router} from 'express'
-import { loginUser, registerUser, verifyOTP } from '../controller/userController.js'
+import { login, register, verifyOtp  } from '../controller/userController.js'
 
 
 
@@ -7,9 +7,9 @@ import { loginUser, registerUser, verifyOTP } from '../controller/userController
 
 
 const userRoutes = Router()
-userRoutes.post('/register',registerUser)
-userRoutes.post('/verify_otp/:id',verifyOTP)
-userRoutes.post('/login',loginUser)
+userRoutes.post('/register',register)
+userRoutes.post('/verify_otp/:id',login)
+userRoutes.post('/login',verifyOtp)
 
 
 
