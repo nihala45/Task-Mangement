@@ -1,29 +1,28 @@
-import express from "express";
-import cors from "cors";
-import userRoutes from "./routes/userRoutes.js";
-import taskRoutes from "./routes/taskRoutes.js";
+import app from "./app";
+import dotenv from "dotenv";
+import connectDB from "./config/db";
 
-const app = express();
+dotenv.config();
 
-const allowedOrigins = [
-  'https://task-mangement-ashy.vercel.app',
-  'https://task-mangement-git-main-nihala45s-projects.vercel.app'
-];
+if (process.env.NODE_ENV !== "production") {
+  const PORT = process.env.PORT || 4000;
+  connectDB()
+    .then(() => {
+      app.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`);
+      });
+    })
+    .catch((err) => {
+      console.error("Failed to start server:", err);
+    });
+}
 
-app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-}));
-
-app.use(express.json());
-
-app.use("/user", userRoutes);
-app.use("/task", taskRoutes);
-
-export default app;
+export default async function handler(req, res) {
+  try {
+    await connectDB();
+    return app(req, res);
+  } catch (error) {
+    console.error("Server error:", error);
+    return res.status(500).json({ error: "Internal Server Error" });
+  }
+}
